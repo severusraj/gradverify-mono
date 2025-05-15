@@ -48,13 +48,26 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
+        console.log(`Login attempt for username: ${username}`);
         const user = await storage.getUserByUsername(username);
-        if (!user || !(await comparePasswords(password, user.password))) {
+        
+        if (!user) {
+          console.log(`User not found: ${username}`);
+          return done(null, false, { message: "Invalid username or password" });
+        }
+        
+        console.log(`User found, comparing passwords for: ${username}`);
+        const passwordMatch = await comparePasswords(password, user.password);
+        
+        if (!passwordMatch) {
+          console.log(`Password mismatch for: ${username}`);
           return done(null, false, { message: "Invalid username or password" });
         } else {
+          console.log(`Login successful for: ${username}`);
           return done(null, user);
         }
       } catch (error) {
+        console.error(`Login error for ${username}:`, error);
         return done(error);
       }
     }),
@@ -132,5 +145,20 @@ export function setupAuth(app: Express) {
     // Remove password from response
     const { password, ...userWithoutPassword } = req.user as SelectUser;
     res.json(userWithoutPassword);
+  });
+  
+  // DEBUG endpoint - only for development
+  app.get("/api/debug/users", async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const usersWithoutPasswords = allUsers.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      console.error('Error fetching users for debug:', error);
+      res.status(500).json({ message: 'Error fetching users' });
+    }
   });
 }
