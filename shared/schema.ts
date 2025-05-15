@@ -154,15 +154,19 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
-export const insertStudentProfileSchema = createInsertSchema(studentProfiles).omit({
-  id: true,
-  psaStatus: true,
-  photoStatus: true, 
-  awardsStatus: true,
-  overallStatus: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertStudentProfileSchema = createInsertSchema(studentProfiles)
+  .omit({
+    id: true,
+    psaStatus: true,
+    photoStatus: true, 
+    awardsStatus: true,
+    overallStatus: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .partial({
+    userId: true,  // Make userId optional for form validation
+  });
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,

@@ -1,5 +1,5 @@
-import { db } from './server/db.js';
-import { users } from './shared/schema.js';
+import { db } from './server/db.ts';
+import { users } from './shared/schema.ts';
 import { scrypt, randomBytes } from 'crypto';
 import { promisify } from 'util';
 
