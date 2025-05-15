@@ -45,8 +45,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      try {
+        // Try the direct login endpoint first for better debug info
+        const debugRes = await apiRequest("POST", "/api/debug/login", credentials);
+        const debugData = await debugRes.json();
+        console.log('Debug login response:', debugData);
+        return debugData;
+      } catch (debugError) {
+        console.error('Debug login failed, falling back to regular login:', debugError);
+        // Fall back to regular login if debug endpoint fails
+        const res = await apiRequest("POST", "/api/login", credentials);
+        return await res.json();
+      }
     },
     onSuccess: (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);

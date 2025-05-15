@@ -95,6 +95,11 @@ const hasRole = (roles: string[]) => {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
   setupAuth(app);
+  
+  // Serve auth test page
+  app.get('/auth-test', (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'auth-test.html'));
+  });
 
   // Dashboard stats route
   app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {

@@ -180,10 +180,15 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
+      // Show debug information
+      console.log(`Found user: ${user.username}, ID: ${user.id}, Role: ${user.role}`);
+      console.log(`Stored password hash: ${user.password.substring(0, 20)}...`);
+      
       // Manual password check
       const passwordMatch = await comparePasswords(password, user.password);
+      console.log(`Password match result: ${passwordMatch}`);
       if (!passwordMatch) {
-        console.log(`Password mismatch for: ${username}, received: ${password}, stored hash: ${user.password}`);
+        console.log(`Password mismatch for: ${username}`);
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
