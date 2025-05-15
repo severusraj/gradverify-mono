@@ -104,12 +104,17 @@ export default function StudentSubmission() {
             </div>
           ) : profileError ? (
             <Card>
-              <CardContent className="pt-6 flex flex-col items-center text-center">
-                <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                <h3 className="text-lg font-medium mb-2">Error Loading Profile</h3>
-                <p className="text-muted-foreground mb-4">
-                  We couldn't load your student profile. Please try again later.
-                </p>
+              <CardHeader>
+                <CardTitle>Create Your Student Profile</CardTitle>
+                <CardDescription>
+                  Please provide your student information to get started with document verification
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UploadForm 
+                  type="profile"
+                  onSuccess={refetchProfile}
+                />
               </CardContent>
             </Card>
           ) : (
