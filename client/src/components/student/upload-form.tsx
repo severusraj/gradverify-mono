@@ -158,6 +158,7 @@ export default function UploadForm({ type, profile, onSuccess }: UploadFormProps
         method = "PATCH";
       }
       
+      console.log("Submitting profile data:", data);
       const res = await apiRequest(method, endpoint, data);
       return res.json();
     },
