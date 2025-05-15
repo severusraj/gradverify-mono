@@ -15,12 +15,14 @@ import {
   type Notification,
   type InsertNotification
 } from "@shared/schema";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, desc, asc } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
 
 const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPgSimple(session);
 
 export interface IStorage {
   // User operations
@@ -65,16 +67,25 @@ export interface IStorage {
   getRecentSubmissions(limit?: number): Promise<any[]>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Using any since express-session's SessionStore type isn't properly exported
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 
   constructor() {
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000, // 24 hours
-    });
+    // Use PostgreSQL session store for production
+    if (process.env.NODE_ENV === 'production') {
+      this.sessionStore = new PostgresSessionStore({ 
+        pool, 
+        createTableIfMissing: true
+      });
+    } else {
+      // Use in-memory session store for development
+      this.sessionStore = new MemoryStore({
+        checkPeriod: 86400000, // 24 hours
+      });
+    }
   }
 
   // User operations

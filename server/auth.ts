@@ -36,7 +36,9 @@ export function setupAuth(app: Express) {
     store: storage.sessionStore,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24, // 1 day
-      httpOnly: true
+      httpOnly: true,
+      secure: false, // Set to false for development
+      sameSite: 'lax'
     }
   };
 
@@ -159,6 +161,45 @@ export function setupAuth(app: Express) {
     } catch (error) {
       console.error('Error fetching users for debug:', error);
       res.status(500).json({ message: 'Error fetching users' });
+    }
+  });
+  
+  // Debug login API that bypasses passport
+  app.post("/api/debug/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      console.log(`Direct login attempt for: ${username}`);
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        console.log(`User not found: ${username}`);
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Manual password check
+      const passwordMatch = await comparePasswords(password, user.password);
+      if (!passwordMatch) {
+        console.log(`Password mismatch for: ${username}, received: ${password}, stored hash: ${user.password}`);
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Manually login
+      req.login(user, (err) => {
+        if (err) {
+          console.error(`Login error for ${username}:`, err);
+          return res.status(500).json({ message: "Login error" });
+        }
+        console.log(`Login successful for: ${username}`);
+        const { password, ...userWithoutPassword } = user;
+        return res.status(200).json(userWithoutPassword);
+      });
+    } catch (error) {
+      console.error("Debug login error:", error);
+      res.status(500).json({ message: "Server error" });
     }
   });
 }
