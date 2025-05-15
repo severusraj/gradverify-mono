@@ -237,95 +237,130 @@ export class DatabaseStorage implements IStorage {
 
   // Dashboard stats
   async getDashboardStats(): Promise<any> {
-    // Count total students
-    const [{ count: totalStudents }] = await db
-      .select({ count: db.fn.count() })
-      .from(studentProfiles);
+    try {
+      // Count total students
+      const allProfiles = await db.select().from(studentProfiles);
+      const totalStudents = allProfiles.length;
+      
+      // Count verifications by status
+      const pendingVerifications = allProfiles.filter(
+        profile => profile.overallStatus === 'pending'
+      ).length;
+      
+      const approvedRecords = allProfiles.filter(
+        profile => profile.overallStatus === 'approved'
+      ).length;
+      
+      const rejectedRecords = allProfiles.filter(
+        profile => profile.overallStatus === 'rejected'
+      ).length;
 
-    // Count pending verifications
-    const [{ count: pendingVerifications }] = await db
-      .select({ count: db.fn.count() })
-      .from(studentProfiles)
-      .where(eq(studentProfiles.overallStatus, 'pending'));
-
-    // Count approved records
-    const [{ count: approvedRecords }] = await db
-      .select({ count: db.fn.count() })
-      .from(studentProfiles)
-      .where(eq(studentProfiles.overallStatus, 'approved'));
-
-    // Count rejected records
-    const [{ count: rejectedRecords }] = await db
-      .select({ count: db.fn.count() })
-      .from(studentProfiles)
-      .where(eq(studentProfiles.overallStatus, 'rejected'));
-
-    return {
-      totalStudents: Number(totalStudents),
-      pendingVerifications: Number(pendingVerifications),
-      approvedRecords: Number(approvedRecords),
-      rejectedRecords: Number(rejectedRecords)
-    };
+      return {
+        totalStudents,
+        pendingVerifications,
+        approvedRecords,
+        rejectedRecords
+      };
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error);
+      // Return default stats to prevent errors
+      return {
+        totalStudents: 0,
+        pendingVerifications: 0,
+        approvedRecords: 0,
+        rejectedRecords: 0
+      };
+    }
   }
 
   async getDepartmentProgress(): Promise<any[]> {
-    // Get all departments
-    const departments = await db
-      .select({ department: studentProfiles.department })
-      .from(studentProfiles)
-      .groupBy(studentProfiles.department);
-
-    const results = [];
-
-    for (const { department } of departments) {
-      // Count total students in department
-      const [{ count: total }] = await db
-        .select({ count: db.fn.count() })
-        .from(studentProfiles)
-        .where(eq(studentProfiles.department, department));
-
-      // Count approved students in department
-      const [{ count: approved }] = await db
-        .select({ count: db.fn.count() })
-        .from(studentProfiles)
-        .where(and(
-          eq(studentProfiles.department, department),
-          eq(studentProfiles.overallStatus, 'approved')
-        ));
-
-      const percentComplete = Math.round((Number(approved) / Number(total)) * 100);
+    try {
+      // Get all student profiles
+      const allProfiles = await db.select().from(studentProfiles);
       
-      results.push({
-        department,
-        percentComplete,
-        total: Number(total),
-        approved: Number(approved)
+      // Get unique departments
+      const departmentSet = new Set<string>();
+      allProfiles.forEach(profile => {
+        if (profile.department) {
+          departmentSet.add(profile.department);
+        }
       });
-    }
+      
+      const departments = Array.from(departmentSet);
+      const results = [];
 
-    return results;
+      for (const department of departments) {
+        // Count total students in department
+        const departmentProfiles = allProfiles.filter(
+          profile => profile.department === department
+        );
+        
+        const total = departmentProfiles.length;
+        
+        // Count approved students in department
+        const approved = departmentProfiles.filter(
+          profile => profile.overallStatus === 'approved'
+        ).length;
+
+        const percentComplete = total > 0 
+          ? Math.round((approved / total) * 100) 
+          : 0;
+        
+        results.push({
+          department,
+          percentComplete,
+          total,
+          approved
+        });
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error getting department progress:', error);
+      return [];
+    }
   }
 
   async getRecentSubmissions(limit: number = 10): Promise<any[]> {
-    const studentProfilesWithUsers = await db
-      .select({
-        id: studentProfiles.id,
-        studentId: studentProfiles.studentId,
-        program: studentProfiles.program,
-        department: studentProfiles.department,
-        psaStatus: studentProfiles.psaStatus,
-        photoStatus: studentProfiles.photoStatus,
-        awardsStatus: studentProfiles.awardsStatus,
-        updatedAt: studentProfiles.updatedAt,
-        userId: studentProfiles.userId,
-        fullName: users.fullName
-      })
-      .from(studentProfiles)
-      .innerJoin(users, eq(studentProfiles.userId, users.id))
-      .orderBy(desc(studentProfiles.updatedAt))
-      .limit(limit);
-
-    return studentProfilesWithUsers;
+    try {
+      // Fetch all student profiles
+      const allProfiles = await db.select().from(studentProfiles);
+      const allUsers = await db.select().from(users);
+      
+      // Create a map of user IDs to user objects for easy lookup
+      const userMap = new Map();
+      allUsers.forEach(user => {
+        userMap.set(user.id, user);
+      });
+      
+      // Join the data manually
+      const submissionsWithUsers = allProfiles.map(profile => {
+        const user = userMap.get(profile.userId);
+        return {
+          id: profile.id,
+          studentId: profile.studentId,
+          program: profile.program,
+          department: profile.department,
+          psaStatus: profile.psaStatus,
+          photoStatus: profile.photoStatus,
+          awardsStatus: profile.awardsStatus,
+          updatedAt: profile.updatedAt,
+          userId: profile.userId,
+          fullName: user ? user.fullName : 'Unknown User'
+        };
+      });
+      
+      // Sort by updatedAt in descending order
+      submissionsWithUsers.sort((a, b) => {
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+      
+      // Return only the requested number of submissions
+      return submissionsWithUsers.slice(0, limit);
+    } catch (error) {
+      console.error('Error getting recent submissions:', error);
+      return [];
+    }
   }
 }
 
