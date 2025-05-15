@@ -698,7 +698,7 @@ export default function UploadForm({ type, profile, onSuccess }: UploadFormProps
                         <FormLabel>Department</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          defaultValue={field.value || ""}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -764,7 +764,7 @@ export default function UploadForm({ type, profile, onSuccess }: UploadFormProps
                         <FormLabel>Sex</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          defaultValue={field.value || ""}
                         >
                           <FormControl>
                             <SelectTrigger>

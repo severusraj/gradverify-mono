@@ -130,19 +130,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Student profile routes
   app.post("/api/student/profile", isAuthenticated, async (req, res) => {
     try {
+      console.log("Profile submission received:", req.body);
       const validation = insertStudentProfileSchema.safeParse(req.body);
       
       if (!validation.success) {
-        return res.status(400).json({ message: "Invalid student profile data", errors: validation.error.errors });
+        console.log("Validation errors:", validation.error.errors);
+        return res.status(400).json({ 
+          message: "Invalid student profile data", 
+          errors: validation.error.errors 
+        });
       }
       
+      console.log("Validation successful, creating profile with userId:", req.user!.id);
       const profile = await storage.createStudentProfile({
         ...validation.data,
         userId: req.user!.id
       });
       
+      console.log("Profile created successfully:", profile);
       res.status(201).json(profile);
     } catch (error) {
+      console.error("Error creating student profile:", error);
       res.status(500).json({ message: "Failed to create student profile" });
     }
   });
