@@ -1,0 +1,121 @@
+**Final Comprehensive System Design Prompt: GC GradVerify**  
+**(Graduation Verification with Awards, Photos, and Faculty Review)**  
+
+---
+
+### **Core Vision**  
+Build a modern, secure, and intuitive web platform for end-to-end graduation verification, including **award tracking**, **photo integration**, and **faculty-driven document validation**. Prioritize seamless workflows, real-time collaboration, and polished outputs for ceremonies.  
+
+**Tech Stack**:  
+- **Frontend**: Next.js (App Router) + Tailwind CSS (modern UI components, dark/light modes).  
+- **Backend**: Next.js API routes (Express.js for advanced PDF generation or batch processing).  
+- **Database**: PostgreSQL with Prisma ORM (schema for awards, documents, roles).  
+- **Storage**: AWS S3 (PSA/photo storage) + CloudFront CDN for fast photo retrieval.  
+- **Auth**: NextAuth.js (role-based access control).  
+
+---
+
+### **User Roles & Features**  
+
+**1. Superadmin Dashboard**  
+- **UI**: Sleek analytics dashboard with department-wise progress charts.  
+- **Features**:  
+  - Create/manage admins (send invites via email with role permissions).  
+  - Set deadlines for submissions and approvals.  
+  - Monitor system-wide stats: verified students, pending awards, rejection rates.  
+
+**2. Admin/Faculty Interface**  
+- **UI**: Tabbed workspace with priority queues and bulk actions.  
+- **Features**:  
+  - **Document Verification Hub**:  
+    - Tab 1: **PSA vs Student Details** (side-by-side comparison).  
+    - Tab 2: **Photo Review** (zoomable preview, guidelines overlay).  
+    - Tab 3: **Award Validation** (approve awards or request proof).  
+  - **Bulk Actions**: Approve/reject submissions with custom comments.  
+  - **Automated Notifications**:  
+    - Email/SMS templates for rejections (e.g., *“PSA mismatch detected”*).  
+    - Award approval requests (e.g., *“Upload certificate for ‘Best Thesis’”*).  
+
+**3. Student Portal**  
+- **UI**: Step-by-step form wizard with live validation.  
+- **Features**:  
+  - **Registration**: Program/department dropdowns + award entry (free text or predefined honors).  
+  - **Upload Hub**:  
+    - PSA birth certificate (PDF/JPEG, max 10MB).  
+    - Graduation photo (JPEG/PNG, max 5MB, face visible).  
+  - **Status Tracker**:  
+    - Real-time badges: “PSA Approved,” “Photo Approved,” “Awards Verified.”  
+    - Re-upload prompts for rejected items with faculty feedback.  
+
+---
+
+### **Key Workflows**  
+
+**A. Student Submission**  
+1. Register → Fill details → Upload PSA + photo → Enter awards.  
+2. System auto-checks file formats → Sends confirmation email.  
+
+**B. Faculty Verification**  
+1. Admins review submissions in a **unified dashboard** (PSA, photo, awards).  
+2. Reject with reason (e.g., *“Photo too blurry”*) or approve sections individually.  
+3. Student notified via email/in-app alert to resolve issues.  
+
+**C. Post-Approval Automation**  
+1. **Certificate Generation**:  
+   - Dynamic PDFs grouped by department/program:  
+     ```  
+     CCS > BSIT  
+     – [Photo] Juan Dela Cruz | Cum Laude, Dean’s Lister  
+     – [Photo] Maria Santos | Best Thesis Award  
+     ```  
+   - CSV export with photo URLs (S3), awards, and contact details for mail merge.  
+2. **Email Invitations**:  
+   - Customizable HTML template with embedded photo, awards, and ceremony details.  
+   - Optional public gallery link for graduates.  
+
+---
+
+### **UI/UX Requirements**  
+1. **Student Profile Page**:  
+   - Photo preview grid with upload guidelines.  
+   - Awards table with status (Verified/Pending/Rejected).  
+2. **Admin Dashboard**:  
+   - Collapsible department tree for quick navigation (e.g., CCS → BSIT → Students).  
+   - Priority queues flagged by submission date.  
+3. **Email Templates**:  
+   - Modern design with responsive layouts.  
+   - Award badges (e.g., ribbons, icons) and department branding.  
+
+---
+
+### **Technical Considerations**  
+- **PDF Generation**: Use `@react-pdf/renderer` for React-friendly layouts or `PDF-Lib` for dynamic PDFs.  
+- **Security**:  
+  - File uploads scanned for malware.  
+  - AWS S3 signed URLs for secure photo access.  
+- **Accessibility**:  
+  - Alt text for photos in PDFs/emails.  
+  - Screen-reader-friendly tables.  
+- **Performance**:  
+  - Image compression for uploaded photos (e.g., Sharp.js).  
+  - Server-side caching for frequent department/program queries.  
+
+---
+
+### **Example Scenario**  
+1. **Student**: Maria submits PSA, photo, and claims *“Dean’s Lister.”*  
+2. **Admin**:  
+   - Approves PSA/photo but flags *“Dean’s Lister”* for proof.  
+   - Sends automated email: *“Upload award proof within 7 days.”*  
+3. **Student**: Uploads certificate → Admin approves → Maria appears in the CBA > BSAc PDF.  
+
+---
+
+### **Next Steps**  
+1. Finalize design system (Tailwind theme, component library).  
+2. Choose PDF library based on complexity (React-PDF for simplicity, PDF-Lib for advanced layouts).  
+3. Implement file cleanup cron jobs (delete unverified submissions after deadlines).  
+
+**Ready for development!** 🚀  
+
+Let me know if you need further refinements!
