@@ -48,31 +48,31 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
-      try {
-        console.log(`Login attempt for username: ${username}`);
-        const user = await storage.getUserByUsername(username);
-        
-        if (!user) {
-          console.log(`User not found: ${username}`);
-          return done(null, false, { message: "Invalid username or password" });
+    new LocalStrategy(
+      { usernameField: 'email' },
+      async (email, password, done) => {
+        try {
+          console.log(`Login attempt for email: ${email}`);
+          const user = await storage.getUserByEmail(email);
+          if (!user) {
+            console.log(`User not found: ${email}`);
+            return done(null, false, { message: "Invalid email or password" });
+          }
+          console.log(`User found, comparing passwords for: ${email}`);
+          const passwordMatch = await comparePasswords(password, user.password);
+          if (!passwordMatch) {
+            console.log(`Password mismatch for: ${email}`);
+            return done(null, false, { message: "Invalid email or password" });
+          } else {
+            console.log(`Login successful for: ${email}`);
+            return done(null, user);
+          }
+        } catch (error) {
+          console.error(`Login error for ${email}:`, error);
+          return done(error);
         }
-        
-        console.log(`User found, comparing passwords for: ${username}`);
-        const passwordMatch = await comparePasswords(password, user.password);
-        
-        if (!passwordMatch) {
-          console.log(`Password mismatch for: ${username}`);
-          return done(null, false, { message: "Invalid username or password" });
-        } else {
-          console.log(`Login successful for: ${username}`);
-          return done(null, user);
-        }
-      } catch (error) {
-        console.error(`Login error for ${username}:`, error);
-        return done(error);
       }
-    }),
+    ),
   );
 
   passport.serializeUser((user, done) => done(null, user.id));
@@ -88,28 +88,23 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const { username, password, email, fullName, role = "student" } = req.body;
-      
+      console.log('Register body:', req.body); // Debug log
+      const { email, password, fullName, role = "student" } = req.body;
       // Validate required fields
-      if (!username || !password || !email || !fullName) {
+      if (!email || !password || !fullName) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      
-      const existingUser = await storage.getUserByUsername(username);
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+        return res.status(400).json({ message: "Email already exists" });
       }
-
       const hashedPassword = await hashPassword(password);
-      
       const user = await storage.createUser({
-        username,
-        password: hashedPassword,
         email,
-        fullName,
+        password: hashedPassword,
+        name: fullName,
         role
       });
-
       req.login(user, (err) => {
         if (err) return next(err);
         // Remove password from response
@@ -122,10 +117,9 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
-      
       req.login(user, (loginErr) => {
         if (loginErr) return next(loginErr);
         // Remove password from response
@@ -167,38 +161,33 @@ export function setupAuth(app: Express) {
   // Debug login API that bypasses passport
   app.post("/api/debug/login", async (req, res) => {
     try {
-      const { username, password } = req.body;
-      console.log(`Direct login attempt for: ${username}`);
-      
-      if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+      const { email, password } = req.body;
+      console.log(`Direct login attempt for: ${email}`);
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
       }
-      
-      const user = await storage.getUserByUsername(username);
+      const user = await storage.getUserByEmail(email);
       if (!user) {
-        console.log(`User not found: ${username}`);
-        return res.status(401).json({ message: "Invalid username or password" });
+        console.log(`User not found: ${email}`);
+        return res.status(401).json({ message: "Invalid email or password" });
       }
-      
       // Show debug information
-      console.log(`Found user: ${user.username}, ID: ${user.id}, Role: ${user.role}`);
+      console.log(`Found user: ${user.email}, ID: ${user.id}, Role: ${user.role}`);
       console.log(`Stored password hash: ${user.password.substring(0, 20)}...`);
-      
       // Manual password check
       const passwordMatch = await comparePasswords(password, user.password);
       console.log(`Password match result: ${passwordMatch}`);
       if (!passwordMatch) {
-        console.log(`Password mismatch for: ${username}`);
-        return res.status(401).json({ message: "Invalid username or password" });
+        console.log(`Password mismatch for: ${email}`);
+        return res.status(401).json({ message: "Invalid email or password" });
       }
-      
       // Manually login
       req.login(user, (err) => {
         if (err) {
-          console.error(`Login error for ${username}:`, err);
+          console.error(`Login error for ${email}:`, err);
           return res.status(500).json({ message: "Login error" });
         }
-        console.log(`Login successful for: ${username}`);
+        console.log(`Login successful for: ${email}`);
         const { password, ...userWithoutPassword } = user;
         return res.status(200).json(userWithoutPassword);
       });
@@ -207,4 +196,6 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  console.log("Auth routes loaded");
 }

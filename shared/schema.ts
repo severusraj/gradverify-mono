@@ -12,14 +12,13 @@ export const awardTypeEnum = pgEnum('award_type', ['latin_honor', 'academic_achi
 // User table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
-  email: text("email").notNull(),
-  fullName: text("full_name").notNull(),
-  role: userRoleEnum("role").default('student').notNull(),
+  role: text("role").notNull(),
+  name: text("name").notNull(),
   department: text("department"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Student profiles table
@@ -57,20 +56,38 @@ export const documents = pgTable("documents", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Submissions table (for student submissions)
+export const submissions = pgTable('submissions', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => users.id),
+  psaUrl: text('psa_url'),
+  photoUrl: text('photo_url'),
+  status: text('status').notNull(), // 'pending', 'approved', 'rejected'
+  feedback: text('feedback'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Awards table
 export const awards = pgTable("awards", {
   id: serial("id").primaryKey(),
-  studentId: integer("student_id").notNull().references(() => studentProfiles.id, { onDelete: 'cascade' }),
+  submissionId: integer("submission_id").references(() => submissions.id),
   name: text("name").notNull(),
-  type: awardTypeEnum("type").notNull(),
-  description: text("description"),
-  proofFileName: text("proof_file_name"),
-  proofFilePath: text("proof_file_path"),
-  status: verificationStatusEnum("status").default('pending'),
+  proofUrl: text("proof_url"),
+  status: text("status").notNull(), // 'pending', 'approved', 'rejected'
   feedback: text("feedback"),
-  verifiedBy: integer("verified_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Verification logs
+export const verificationLogs = pgTable('verification_logs', {
+  id: serial('id').primaryKey(),
+  submissionId: integer('submission_id').references(() => submissions.id),
+  adminId: integer('admin_id').references(() => users.id),
+  action: text('action').notNull(), // 'approve', 'reject'
+  details: json('details'),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 // Notifications table
@@ -89,18 +106,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [studentProfiles.userId],
   }),
-  verifiedDocuments: many(documents, {
-    fields: [users.id],
-    references: [documents.verifiedBy],
-  }),
-  verifiedAwards: many(awards, {
-    fields: [users.id],
-    references: [awards.verifiedBy],
-  }),
-  notifications: many(notifications, {
-    fields: [users.id],
-    references: [notifications.userId],
-  }),
+  verifiedDocuments: many(documents),
+  verifiedAwards: many(awards),
+  notifications: many(notifications),
 }));
 
 export const studentProfilesRelations = relations(studentProfiles, ({ one, many }) => ({
@@ -108,14 +116,8 @@ export const studentProfilesRelations = relations(studentProfiles, ({ one, many 
     fields: [studentProfiles.userId],
     references: [users.id],
   }),
-  documents: many(documents, {
-    fields: [studentProfiles.id],
-    references: [documents.studentId],
-  }),
-  awards: many(awards, {
-    fields: [studentProfiles.id],
-    references: [awards.studentId],
-  }),
+  documents: many(documents),
+  awards: many(awards),
 }));
 
 export const documentsRelations = relations(documents, ({ one }) => ({
@@ -130,12 +132,12 @@ export const documentsRelations = relations(documents, ({ one }) => ({
 }));
 
 export const awardsRelations = relations(awards, ({ one }) => ({
-  student: one(studentProfiles, {
-    fields: [awards.studentId],
-    references: [studentProfiles.id],
+  submission: one(submissions, {
+    fields: [awards.submissionId],
+    references: [submissions.id],
   }),
   verifier: one(users, {
-    fields: [awards.verifiedBy],
+    fields: [awards.submissionId],
     references: [users.id],
   }),
 }));
@@ -177,13 +179,25 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
   updatedAt: true,
 });
 
+export const insertSubmissionSchema = createInsertSchema(submissions).omit({
+  id: true,
+  status: true,
+  feedback: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertAwardSchema = createInsertSchema(awards).omit({
   id: true,
   status: true,
   feedback: true,
-  verifiedBy: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertVerificationLogSchema = createInsertSchema(verificationLogs).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
@@ -202,8 +216,14 @@ export type InsertStudentProfile = z.infer<typeof insertStudentProfileSchema>;
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
+export type Submission = typeof submissions.$inferSelect;
+export type InsertSubmission = z.infer<typeof insertSubmissionSchema>;
+
 export type Award = typeof awards.$inferSelect;
 export type InsertAward = z.infer<typeof insertAwardSchema>;
+
+export type VerificationLog = typeof verificationLogs.$inferSelect;
+export type InsertVerificationLog = z.infer<typeof insertVerificationLogSchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
@@ -225,6 +245,6 @@ export type DocumentWithStudentAndVerifier = Document & {
 };
 
 export type AwardWithStudentAndVerifier = Award & {
-  student: StudentProfile & { user: User };
+  submission: Submission & { student: StudentProfile & { user: User } };
   verifier?: User;
 };

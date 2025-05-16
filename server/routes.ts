@@ -7,6 +7,10 @@ import path from "path";
 import fs from "fs";
 import { randomBytes } from "crypto";
 import { insertStudentProfileSchema, insertDocumentSchema, insertAwardSchema, insertNotificationSchema } from "@shared/schema";
+import { Router } from 'express';
+import { db } from './db';
+import { submissions, awards, verificationLogs, Document as DbDocument, Award as DbAward } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 // Configure multer for file uploads
 const createUploadDir = (dir: string) => {
@@ -33,34 +37,19 @@ const storage_config = multer.diskStorage({
   },
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage_config,
-  limits: { 
-    fileSize: 10 * 1024 * 1024, // 10MB max for PSA
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Check file types based on fieldname
-    if (file.fieldname === "psa") {
-      if (file.mimetype === "application/pdf" || 
-          file.mimetype === "image/jpeg" || 
-          file.mimetype === "image/png") {
+    if (file.fieldname === "file") {
+      if (
+        file.mimetype === "application/pdf" ||
+        file.mimetype === "image/jpeg" ||
+        file.mimetype === "image/png"
+      ) {
         cb(null, true);
       } else {
-        cb(new Error("PSA document must be PDF, JPEG, or PNG"));
-      }
-    } else if (file.fieldname === "photo") {
-      if (file.mimetype === "image/jpeg" || file.mimetype === "image/png") {
-        cb(null, true);
-      } else {
-        cb(new Error("Photo must be JPEG or PNG"));
-      }
-    } else if (file.fieldname === "awardProof") {
-      if (file.mimetype === "application/pdf" || 
-          file.mimetype === "image/jpeg" || 
-          file.mimetype === "image/png") {
-        cb(null, true);
-      } else {
-        cb(new Error("Award proof must be PDF, JPEG, or PNG"));
+        cb(new Error("Document must be PDF, JPEG, or PNG"));
       }
     } else {
       cb(new Error("Unexpected field"));
@@ -91,6 +80,129 @@ const hasRole = (roles: string[]) => {
     res.status(403).json({ message: "Forbidden: Insufficient permissions" });
   };
 };
+
+const router = Router();
+
+// Student Routes
+router.post('/submissions', upload.fields([
+  { name: 'psa', maxCount: 1 },
+  { name: 'photo', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const { studentId, awards: awardsList } = req.body;
+
+    // Create submission
+    const [submission] = await db.insert(submissions).values({
+      studentId: parseInt(studentId),
+      psaUrl: files.psa?.[0].path,
+      photoUrl: files.photo?.[0].path,
+      status: 'pending'
+    }).returning();
+
+    // Create awards
+    if (awardsList) {
+      const awardsData = JSON.parse(awardsList).map((award: string) => ({
+        submissionId: submission.id,
+        name: award,
+        status: 'pending'
+      }));
+      await db.insert(awards).values(awardsData);
+    }
+
+    res.json({ success: true, submission });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create submission' });
+  }
+});
+
+// Admin Routes
+router.get('/submissions', async (req, res) => {
+  try {
+    const allSubmissions = await db.query.submissions.findMany({
+      with: {
+        awards: true
+      }
+    });
+    res.json(allSubmissions);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+});
+
+router.post('/submissions/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, feedback, adminId } = req.body;
+
+    // Update submission status
+    await db.update(submissions)
+      .set({ status, feedback })
+      .where(eq(submissions.id, parseInt(id)));
+
+    // Log verification
+    await db.insert(verificationLogs).values({
+      submissionId: parseInt(id),
+      adminId: parseInt(adminId),
+      action: status,
+      details: { feedback }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to verify submission' });
+  }
+});
+
+router.post('/awards/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, feedback, adminId } = req.body;
+
+    // Update award status
+    await db.update(awards)
+      .set({ status, feedback })
+      .where(eq(awards.id, parseInt(id)));
+
+    // Log verification
+    await db.insert(verificationLogs).values({
+      submissionId: parseInt(id),
+      adminId: parseInt(adminId),
+      action: status,
+      details: { feedback }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to verify award' });
+  }
+});
+
+// Bulk approve/reject submissions endpoint
+router.post('/submissions/bulk-verify', isAuthenticated, hasRole(['faculty', 'admin', 'superadmin']), async (req, res) => {
+  try {
+    const { submissionIds, status, feedback } = req.body;
+    if (!submissionIds || !Array.isArray(submissionIds) || !status) {
+      return res.status(400).json({ message: 'Invalid input: submissionIds and status are required' });
+    }
+    const adminId = req.user!.id;
+    const results = await Promise.all(
+      submissionIds.map(async (id) => {
+        await db.update(submissions).set({ status, feedback }).where(eq(submissions.id, id));
+        await db.insert(verificationLogs).values({
+          submissionId: id,
+          adminId,
+          action: status,
+          details: { feedback }
+        });
+        return { id, status };
+      })
+    );
+    res.json({ success: true, results });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to bulk verify submissions' });
+  }
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
@@ -227,12 +339,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
-      
       const studentProfile = await storage.getStudentProfileByUserId(req.user!.id);
       if (!studentProfile) {
         return res.status(404).json({ message: "Student profile not found" });
       }
-      
       const documentData = {
         studentId: studentProfile.id,
         documentType: req.body.documentType,
@@ -280,9 +390,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const status = req.query.status as string;
       
-      let documents;
-      if (status) {
-        documents = await storage.getDocumentsByStatus(status);
+      let documents: DbDocument[] = [];
+      if (status && ["pending", "approved", "rejected"].includes(status)) {
+        documents = await storage.getDocumentsByStatus(status as "pending" | "approved" | "rejected");
       } else {
         // Here you would need to implement a method to get all documents
         // This is a placeholder
@@ -347,19 +457,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const awardData = {
-        studentId: studentProfile.id,
+        submissionId: req.body.submissionId ? Number(req.body.submissionId) : undefined,
         name: req.body.name,
         type: req.body.type,
         description: req.body.description,
+        proofUrl: req.file ? req.file.path : undefined,
+        status: 'pending',
       };
-      
-      // Add proof file if uploaded
-      if (req.file) {
-        Object.assign(awardData, {
-          proofFileName: req.file.originalname,
-          proofFilePath: req.file.path
-        });
-      }
       
       const validation = insertAwardSchema.safeParse(awardData);
       if (!validation.success) {
@@ -395,7 +499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const status = req.query.status as string;
       
-      let awards;
+      let awards: DbAward[] = [];
       if (status) {
         awards = await storage.getAwardsByStatus(status);
       } else {
@@ -426,21 +530,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updatedAward = await storage.updateAward(awardId, {
         status,
-        feedback,
-        verifiedBy: req.user!.id
+        feedback
       });
       
       // Update student profile status if needed
-      // We would need to check if all awards are verified to update the overall status
-      
       // Create notification for student
-      const studentProfile = await storage.getStudentProfile(award.studentId);
-      if (studentProfile) {
-        await storage.createNotification({
-          userId: studentProfile.userId,
-          title: `Award ${status}`,
-          message: `Your award "${award.name}" has been ${status}${feedback ? `: ${feedback}` : '.'}`
-        });
+      // Use submissionId to get the student profile
+      if (award.submissionId) {
+        const submission = await storage.getSubmission(award.submissionId);
+        if (submission) {
+          const studentProfile = await storage.getStudentProfile(submission.studentId);
+          if (studentProfile) {
+            await storage.createNotification({
+              userId: studentProfile.userId,
+              title: `Award ${status}`,
+              message: `Your award "${award.name}" has been ${status}${feedback ? `: ${feedback}` : '.'}`
+            });
+          }
+        }
       }
       
       res.json(updatedAward);
@@ -473,6 +580,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to mark notification as read" });
     }
   });
+
+  app.use('/api', router);
 
   const httpServer = createServer(app);
 

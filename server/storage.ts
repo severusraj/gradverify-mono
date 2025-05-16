@@ -4,6 +4,7 @@ import {
   documents,
   awards,
   notifications, 
+  submissions,
   type User,
   type InsertUser, 
   type StudentProfile,
@@ -28,7 +29,7 @@ export interface IStorage {
   // User operations
   getAllUsers(): Promise<User[]>;
   getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUsersByRole(role: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
@@ -44,7 +45,7 @@ export interface IStorage {
   // Document operations
   getDocument(id: number): Promise<Document | undefined>;
   getDocumentsByStudentId(studentId: number): Promise<Document[]>;
-  getDocumentsByStatus(status: string): Promise<Document[]>;
+  getDocumentsByStatus(status: "pending" | "approved" | "rejected"): Promise<Document[]>;
   createDocument(document: InsertDocument): Promise<Document>;
   updateDocument(id: number, document: Partial<Document>): Promise<Document | undefined>;
   
@@ -77,7 +78,7 @@ export class DatabaseStorage implements IStorage {
     // Use PostgreSQL session store for production
     if (process.env.NODE_ENV === 'production') {
       this.sessionStore = new PostgresSessionStore({ 
-        pool, 
+        pool: pool as any, 
         createTableIfMissing: true
       });
     } else {
@@ -97,8 +98,8 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 
@@ -140,7 +141,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudentProfile(profile: InsertStudentProfile): Promise<StudentProfile> {
-    const [studentProfile] = await db.insert(studentProfiles).values(profile).returning();
+    if (!profile.userId) throw new Error('userId is required');
+    const [studentProfile] = await db.insert(studentProfiles).values(profile as Required<InsertStudentProfile>).returning();
     return studentProfile;
   }
 
@@ -163,7 +165,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(documents).where(eq(documents.studentId, studentId));
   }
 
-  async getDocumentsByStatus(status: string): Promise<Document[]> {
+  async getDocumentsByStatus(status: "pending" | "approved" | "rejected"): Promise<Document[]> {
     return await db.select().from(documents).where(eq(documents.status, status));
   }
 
@@ -188,7 +190,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAwardsByStudentId(studentId: number): Promise<Award[]> {
-    return await db.select().from(awards).where(eq(awards.studentId, studentId));
+    return [];
   }
 
   async getAwardsByStatus(status: string): Promise<Award[]> {
@@ -196,7 +198,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAward(award: InsertAward): Promise<Award> {
-    const [newAward] = await db.insert(awards).values(award).returning();
+    const awardWithStatus = { ...award, status: 'pending' };
+    const [newAward] = await db.insert(awards).values(awardWithStatus).returning();
     return newAward;
   }
 
@@ -361,6 +364,11 @@ export class DatabaseStorage implements IStorage {
       console.error('Error getting recent submissions:', error);
       return [];
     }
+  }
+
+  async getSubmission(id: number): Promise<any | undefined> {
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, id));
+    return submission;
   }
 }
 

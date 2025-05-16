@@ -38,9 +38,8 @@ async function createAdminAccounts() {
       // Create superadmin account
       const superadminPassword = await hashPassword('superadmin123');
       await db.insert(users).values({
-        username: 'superadmin',
-        password: superadminPassword,
         email: 'superadmin@gradverify.edu',
+        password: superadminPassword,
         fullName: 'Super Admin User',
         role: 'superadmin',
         department: 'Executive Office'
@@ -56,7 +55,6 @@ async function createAdminAccounts() {
       // Create faculty account
       const facultyPassword = await hashPassword('faculty123');
       await db.insert(users).values({
-        username: 'faculty',
         password: facultyPassword,
         email: 'faculty@gradverify.edu',
         fullName: 'Faculty User',

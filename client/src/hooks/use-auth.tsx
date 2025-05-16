@@ -18,14 +18,13 @@ type AuthContextType = {
 };
 
 type LoginData = {
-  username: string;
+  email: string;
   password: string;
 };
 
 type RegisterData = {
-  username: string;
-  password: string;
   email: string;
+  password: string;
   fullName: string;
   role?: string;
 };
@@ -62,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.fullName}!`,
+        description: `Welcome back, ${user.name}!`,
       });
     },
     onError: (error: Error) => {
@@ -83,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Registration successful",
-        description: `Welcome, ${user.fullName}!`,
+        description: `Welcome, ${user.name}!`,
       });
     },
     onError: (error: Error) => {
